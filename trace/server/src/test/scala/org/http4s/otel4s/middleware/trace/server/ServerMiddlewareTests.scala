@@ -20,6 +20,8 @@ package otel4s.middleware.trace.server
 import cats.effect.IO
 import cats.effect.testkit.TestControl
 import munit.CatsEffectSuite
+import org.http4s.otel4s.middleware.redact.PathRedactor
+import org.http4s.otel4s.middleware.redact.QueryRedactor
 import org.http4s.syntax.literals._
 import org.typelevel.ci.CIStringSyntax
 import org.typelevel.otel4s.Attribute
@@ -38,6 +40,7 @@ import scala.concurrent.duration.Duration
 import scala.util.control.NoStackTrace
 
 class ServerMiddlewareTests extends CatsEffectSuite {
+  import ServerMiddlewareTests.NoopRedactor
 
   private val spanLimits = SpanLimits.default
 
@@ -54,7 +57,7 @@ class ServerMiddlewareTests extends CatsEffectSuite {
             val response = Response[IO](Status.Ok).withHeaders(headers)
             val tracedServer =
               ServerMiddleware
-                .default[IO]
+                .default[IO](NoopRedactor)
                 .withAllowedRequestHeaders(Set(ci"foo"))
                 .withAllowedResponseHeaders(Set(ci"baz"))
                 .buildHttpApp(HttpApp[IO](_.body.compile.drain.as(response)))
@@ -102,7 +105,7 @@ class ServerMiddlewareTests extends CatsEffectSuite {
             val error = new RuntimeException("oops") with NoStackTrace {}
 
             val tracedServer = ServerMiddleware
-              .default[IO]
+              .default[IO](NoopRedactor)
               .buildHttpApp(HttpApp[IO](_ => IO.raiseError(error)))
 
             val request = Request[IO](Method.GET, uri"http://localhost/")
@@ -148,7 +151,7 @@ class ServerMiddlewareTests extends CatsEffectSuite {
         .use { testkit =>
           testkit.tracerProvider.get("tracer").flatMap { implicit tracer =>
             val tracedServer = ServerMiddleware
-              .default[IO]
+              .default[IO](NoopRedactor)
               .buildHttpApp(HttpApp[IO](_ => IO.pure(Response[IO](Status.InternalServerError))))
 
             val request = Request[IO](Method.GET, uri"http://localhost/")
@@ -183,7 +186,7 @@ class ServerMiddlewareTests extends CatsEffectSuite {
         .use { testkit =>
           testkit.tracerProvider.get("tracer").flatMap { implicit tracer =>
             val tracedServer = ServerMiddleware
-              .default[IO]
+              .default[IO](NoopRedactor)
               .buildHttpApp(HttpApp[IO](_ => IO.canceled.as(Response[IO](Status.Ok))))
 
             val request = Request[IO](Method.GET, uri"http://localhost/")
@@ -212,4 +215,8 @@ class ServerMiddlewareTests extends CatsEffectSuite {
     }
   }
 
+}
+
+object ServerMiddlewareTests {
+  object NoopRedactor extends PathRedactor.NeverRedact with QueryRedactor.NeverRedact
 }

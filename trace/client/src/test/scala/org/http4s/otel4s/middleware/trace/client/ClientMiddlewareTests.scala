@@ -24,6 +24,7 @@ import cats.syntax.flatMap._
 import munit.CatsEffectSuite
 import org.http4s.client.Client
 import org.http4s.syntax.literals._
+import org.typelevel.ci.CIString
 import org.typelevel.ci.CIStringSyntax
 import org.typelevel.otel4s.Attribute
 import org.typelevel.otel4s.AttributeKey
@@ -41,6 +42,7 @@ import scala.concurrent.duration.Duration
 import scala.util.control.NoStackTrace
 
 class ClientMiddlewareTests extends CatsEffectSuite {
+  import ClientMiddlewareTests.MinimalRedactor
 
   private val spanLimits = SpanLimits.default
 
@@ -61,7 +63,7 @@ class ClientMiddlewareTests extends CatsEffectSuite {
               }
             val tracedClient =
               ClientMiddleware
-                .default[IO]
+                .default[IO](MinimalRedactor)
                 .withAllowedRequestHeaders(Set(ci"foo"))
                 .withAllowedResponseHeaders(Set(ci"baz"))
                 .build(fakeClient)
@@ -118,7 +120,8 @@ class ClientMiddlewareTests extends CatsEffectSuite {
                 .run(req)
                 .evalTap(_ => Tracer[IO].currentSpanOrThrow.flatMap(_.updateName("NEW SPAN NAME")))
             }
-            val tracedClient = ClientMiddleware.default[IO].build(traceManipulatingClient)
+            val tracedClient =
+              ClientMiddleware.default[IO](MinimalRedactor).build(traceManipulatingClient)
 
             val request = Request[IO](Method.GET, uri"http://localhost/?#")
             tracedClient.run(request).use(_.body.compile.drain)
@@ -133,6 +136,36 @@ class ClientMiddlewareTests extends CatsEffectSuite {
   }
 
   test("ClientMiddleware allows overriding span name") {
+    val provider: SpanAndAttributeProvider = new SpanAndAttributeProvider {
+      type Shared = None.type
+
+      def processSharedData[F[_]](
+          request: Request[F],
+          urlTemplateClassifier: UriTemplateClassifier,
+          urlRedactor: UriRedactor,
+      ): Shared = None
+
+      def spanName[F[_]](
+          request: Request[F],
+          urlTemplateClassifier: UriTemplateClassifier,
+          urlRedactor: UriRedactor,
+          sharedProcessedData: Shared,
+      ): String = "Overridden span name"
+
+      def requestAttributes[F[_]](
+          request: Request[F],
+          urlTemplateClassifier: UriTemplateClassifier,
+          urlRedactor: UriRedactor,
+          sharedProcessedData: Shared,
+          allowedHeaders: Set[CIString],
+      ): Attributes = Attributes.empty
+
+      def responseAttributes[F[_]](
+          response: Response[F],
+          allowedHeaders: Set[CIString],
+      ): Attributes = Attributes.empty
+    }
+
     val spanName = "Overridden span name"
     TracesTestkit
       .inMemory[IO]()
@@ -148,11 +181,11 @@ class ClientMiddlewareTests extends CatsEffectSuite {
               }
             val tracedClient =
               ClientMiddleware
-                .default[IO]
+                .default[IO](MinimalRedactor)
+                .withSpanAndAttributeProvider(provider)
                 .build(fakeClient)
 
             val request = Request[IO](Method.GET, uri"http://localhost/?#")
-              .withAttribute(ClientMiddleware.OverrideSpanNameKey, spanName)
             tracedClient.run(request).use(_.body.compile.drain)
           }
           spans <- testkit.finishedSpans
@@ -176,7 +209,7 @@ class ClientMiddlewareTests extends CatsEffectSuite {
               Resource.raiseError[IO, Response[IO], Throwable](error)
             }
 
-            val tracedClient = ClientMiddleware.default[IO].build(fakeClient)
+            val tracedClient = ClientMiddleware.default[IO](MinimalRedactor).build(fakeClient)
             val request = Request[IO](Method.GET, uri"http://localhost/")
 
             val events = Vector(
@@ -223,7 +256,7 @@ class ClientMiddlewareTests extends CatsEffectSuite {
               Resource.canceled[IO] >> Resource.never[IO, Response[IO]]
             }
 
-            val tracedClient = ClientMiddleware.default[IO].build(fakeClient)
+            val tracedClient = ClientMiddleware.default[IO](MinimalRedactor).build(fakeClient)
             val request = Request[IO](Method.GET, uri"http://localhost/?#")
 
             val status = StatusData(StatusCode.Error, "canceled")
@@ -254,7 +287,7 @@ class ClientMiddlewareTests extends CatsEffectSuite {
                 HttpApp[IO](_.body.compile.drain.as(Response[IO](Status.Ok)))
               }
 
-            val tracedClient = ClientMiddleware.default[IO].build(fakeClient)
+            val tracedClient = ClientMiddleware.default[IO](MinimalRedactor).build(fakeClient)
             val request = Request[IO](Method.GET, uri"http://localhost/")
 
             val events = Vector(
@@ -302,7 +335,7 @@ class ClientMiddlewareTests extends CatsEffectSuite {
                 HttpApp[IO](_.body.compile.drain.as(Response[IO](Status.Ok)))
               }
 
-            val tracedClient = ClientMiddleware.default[IO].build(fakeClient)
+            val tracedClient = ClientMiddleware.default[IO](MinimalRedactor).build(fakeClient)
             val request = Request[IO](Method.GET, uri"http://localhost/?#")
 
             val status = StatusData(StatusCode.Error, "canceled")
@@ -331,7 +364,7 @@ class ClientMiddlewareTests extends CatsEffectSuite {
                 HttpApp[IO](_.body.compile.drain.as(Response[IO](Status.InternalServerError)))
               }
 
-            val tracedClient = ClientMiddleware.default[IO].build(fakeClient)
+            val tracedClient = ClientMiddleware.default[IO](MinimalRedactor).build(fakeClient)
             val request = Request[IO](Method.GET, uri"http://localhost/")
 
             val status = StatusData(StatusCode.Error)
@@ -358,4 +391,8 @@ class ClientMiddlewareTests extends CatsEffectSuite {
         }
     }
   }
+}
+
+object ClientMiddlewareTests {
+  object MinimalRedactor extends UriRedactor.OnlyRedactUserInfo
 }
