@@ -111,5 +111,7 @@ object AttributeProvider {
           response: Response[F],
           headersAllowedAsAttributes: Set[AuthScheme],
       ): Attributes = Attributes.empty
+      def exceptionAttributes(cause: Throwable): Attributes =
+        Attributes.empty
     }
 }
