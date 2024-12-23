@@ -146,6 +146,9 @@ trait SpanDataProvider extends AttributeProvider { self =>
       ): Attributes =
         self.responseAttributes(response, headersAllowedAsAttributes) ++
           that.responseAttributes(response, headersAllowedAsAttributes)
+
+      def exceptionAttributes(cause: Throwable): Attributes =
+        self.exceptionAttributes(cause) ++ that.exceptionAttributes(cause)
     }
 }
 
@@ -203,7 +206,7 @@ object SpanDataProvider {
         b += sharedProcessedData.httpRequestMethod // http4s does not support unknown request methods
         b ++= TypedServerAttributes.urlPath(request.uri.path, redactor)
         b ++= TypedServerAttributes.urlScheme(scheme)
-        // `error.type` handled by `responseAttributes`
+        // `error.type` handled by `responseAttributes` and `exceptionAttributes`
         if (sharedProcessedData.requestMethodIsUnknown) {
           b += TypedAttributes.httpRequestMethodOriginal(request.method)
         }
@@ -240,7 +243,7 @@ object SpanDataProvider {
         val b = Attributes.newBuilder
 
         if (response.status.responseClass == Status.ServerError) {
-          // setting `error.type` for a `Throwable` must be done in the middleware
+          // `error.type` for a `Throwable` handled by `exceptionAttributes`
           b += TypedAttributes.errorType(response.status)
         }
         b += TypedAttributes.httpResponseStatusCode(response.status)
@@ -250,6 +253,9 @@ object SpanDataProvider {
 
         b.result()
       }
+
+      def exceptionAttributes(cause: Throwable): Attributes =
+        Attributes(TypedAttributes.errorType(cause))
     }
   }
 

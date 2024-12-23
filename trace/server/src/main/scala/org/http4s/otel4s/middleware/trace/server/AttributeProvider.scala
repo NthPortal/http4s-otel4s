@@ -57,6 +57,9 @@ trait AttributeProvider { self =>
       headersAllowedAsAttributes: Set[CIString],
   ): Attributes
 
+  /** Provides attributes for a span based on a given exception. */
+  def exceptionAttributes(cause: Throwable): Attributes
+
   /** @return an `AttributeProvider` that provides the attributes from this and
     *         another `AttributeProvider`
     */
@@ -87,6 +90,9 @@ trait AttributeProvider { self =>
       ): Attributes =
         self.responseAttributes(response, headersAllowedAsAttributes) ++
           that.responseAttributes(response, headersAllowedAsAttributes)
+
+      def exceptionAttributes(cause: Throwable): Attributes =
+        self.exceptionAttributes(cause) ++ that.exceptionAttributes(cause)
     }
 }
 

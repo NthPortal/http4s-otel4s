@@ -146,7 +146,9 @@ class ClientMiddlewareBuilder[F[_]: TracerProvider: Concurrent] private (
                   }
 
                 case Outcome.Errored(e) =>
-                  Resource.eval(span.addAttributes(TypedAttributes.errorType(e)))
+                  Resource.eval {
+                    span.addAttributes(spanDataProvider.exceptionAttributes(e))
+                  }
 
                 case Outcome.Canceled() =>
                   Resource.unit

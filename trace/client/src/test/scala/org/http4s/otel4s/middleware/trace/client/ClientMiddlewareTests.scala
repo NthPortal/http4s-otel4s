@@ -175,6 +175,9 @@ class ClientMiddlewareTests extends CatsEffectSuite {
           response: Response[F],
           headersAllowedAsAttributes: Set[CIString],
       ): Attributes = Attributes.empty
+
+      def exceptionAttributes(cause: Throwable): Attributes =
+        Attributes.empty
     }
 
     val spanName = "Overridden span name"

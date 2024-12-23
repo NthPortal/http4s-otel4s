@@ -136,7 +136,7 @@ class ServerMiddlewareBuilder[F[_]: TracerProvider: MonadCancelThrow] private (
                           .unlessA(resp.status.isSuccess)
                       }
                     case Outcome.Errored(e) =>
-                      span.addAttributes(TypedAttributes.errorType(e))
+                      span.addAttributes(spanDataProvider.exceptionAttributes(e))
                     case Outcome.Canceled() =>
                       MonadCancelThrow[G].unit
                   }
